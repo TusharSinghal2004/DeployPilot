@@ -1,0 +1,79 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model EphemeralLink {
+  id              String    @id @default(cuid())
+  deploymentId    String?
+  frontendUrl     String
+  backendUrl      String
+  accessTokenHash String
+  passwordHash    String?
+  state           String    @default("active") // active | expired | destroyed
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+  destroyedAt     DateTime?
+  createdBy       String?
+  hitCount        Int       @default(0)
+  lastHitAt       DateTime?
+
+  @@index([state, expiresAt])
+}
+
+model Deployment {
+  id                  String   @id @default(cuid())
+  analysisId          String
+  repoUrl             String
+  provider            String   // "vercel" | "render"
+  serviceType         String   // "frontend" | "backend"
+  status              String   @default("pending") // pending|deploying|ready|failed|rolled_back
+  url                 String?
+  isHealthy           Boolean  @default(false)
+  healthFailureStreak Int      @default(0)
+  rollbackOf          String?  // FK -> Deployment.id, self-relation
+  startedAt           DateTime @default(now())
+  finishedAt          DateTime?
+
+  @@index([analysisId])
+  @@index([repoUrl])
+  @@unique([analysisId, provider, serviceType])
+}
+
+model Analysis {
+  id            String   @id @default(cuid())
+  repoUrl       String
+  repoOwner     String
+  repoName      String
+  defaultBranch String
+  commitSha     String
+  factsJson     String   // JSON.stringify(RepoFacts)
+  blueprintJson String  // JSON.stringify(Blueprint)
+  planJson      String   // JSON.stringify(DeploymentPlan)
+  confidence    String   // "high" | "medium" | "low"
+  createdAt     DateTime @default(now())
+
+  @@index([repoUrl])
+}
+
+model ActionLog {
+  id             String   @id @default(cuid())
+  analysisId     String?
+  deploymentId   String?
+  timestamp      DateTime @default(now())
+  actor          String   // "USER" | "GEMMA" | "AGENT" | "GITHUB"
+  action         String   // e.g. "analyze_repo", "approve_plan"
+  target         String?
+  status         String   // "ok" | "error" | "info"
+  riskLevel      String   @default("none") // none|low|medium|high
+  approvalStatus String   @default("n/a")  // n/a|pending|approved|declined
+  detailsJson    String?
+
+  @@index([analysisId])
+  @@index([deploymentId])
+  @@index([timestamp])
+}
